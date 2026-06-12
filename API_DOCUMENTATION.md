@@ -65,13 +65,15 @@ All API errors return a standard JSON structure with appropriate HTTP status cod
   {
     "name": "Ehtisham",
     "email": "iamehtisham10@asgmail.com",
-    "password": "SecurePassword123!"
+    "password": "SecurePassword123!",
+    "confirmPassword": "SecurePassword123!"
   }
   ```
 * **Validation Rules:**
   * `name`: Required.
   * `email`: Required, must be a valid email format, must be unique in DB.
   * `password`: Required.
+  * `confirmPassword`: Required, must match `password` exactly.
 * **Success Response (`201 Created`):**
   ```json
   {

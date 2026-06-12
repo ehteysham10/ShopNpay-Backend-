@@ -96,13 +96,17 @@ export const googleLogin = asyncHandler(async (req, res) => {
 
 // existing functions unchanged
 export const register = asyncHandler(async (req, res) => {
-    const { name, email, password } = req.body;
+    const { name, email, password, confirmPassword } = req.body;
 
-    if (!name || !email || !password) {
-        throw new AppError('Name, email, and password are required', 400);
+    if (!name || !email || !password || !confirmPassword) {
+        throw new AppError('Name, email, password, and confirmPassword are required', 400);
     }
 
-    const result = await authService.registerUser(req.body);
+    if (password !== confirmPassword) {
+        throw new AppError('Both password and confirm password must be same', 400);
+    }
+
+    const result = await authService.registerUser({ name, email, password });
 
     res.status(201).json({
         status: 'success',
