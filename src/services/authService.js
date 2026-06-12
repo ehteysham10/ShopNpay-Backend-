@@ -369,3 +369,93 @@ const sendVerificationEmail = async (user, token) => {
         html
     });
 };
+
+// ================= FORGOT PASSWORD =================
+export const forgotPassword = async (email) => {
+    const user = await User.findOne({ email });
+
+    // Always return success to prevent user enumeration
+    if (!user) return;
+
+    // Block Google-only users (no password to reset)
+    if (user.authProvider === 'google' && !user.password) {
+        throw new AppError('This account uses Google login. Password reset is not available.', 400);
+    }
+
+    // Generate random token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+
+    // Hash token before storing in DB
+    user.passwordResetToken = crypto
+        .createHash('sha256')
+        .update(resetToken)
+        .digest('hex');
+
+    // Token expires in 10 minutes
+    user.passwordResetExpires = Date.now() + 10 * 60 * 1000;
+
+    await user.save({ validateBeforeSave: false });
+
+    // Build reset URL (points to frontend)
+    const frontendURL = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const resetURL = `${frontendURL}/reset-password/${resetToken}`;
+
+    const html = `
+    <div style="font-family:Arial;background:#f4f4f4;padding:20px;">
+        <div style="max-width:600px;margin:auto;background:#fff;padding:25px;border-radius:10px;">
+            <h2 style="color:#333;">Reset Your Password</h2>
+            <p>Hello <b>${user.name}</b>,</p>
+            <p>You requested a password reset. Click the button below to set a new password:</p>
+            <a href="${resetURL}" style="display:inline-block;padding:12px 24px;background:#4f46e5;color:white;text-decoration:none;border-radius:6px;font-weight:bold;">
+                Reset Password
+            </a>
+            <p style="margin-top:20px;color:#888;font-size:12px;">
+                This link will expire in 10 minutes. If you didn't request this, please ignore this email.
+            </p>
+        </div>
+    </div>
+    `;
+
+    try {
+        await sendEmail({
+            email: user.email,
+            subject: 'Reset your ShopnPay password',
+            message: `Reset your password here: ${resetURL}`,
+            html
+        });
+    } catch (err) {
+        // If email fails, clear the token
+        user.passwordResetToken = undefined;
+        user.passwordResetExpires = undefined;
+        await user.save({ validateBeforeSave: false });
+
+        throw new AppError('Failed to send reset email. Try again later.', 500);
+    }
+};
+
+// ================= RESET PASSWORD =================
+export const resetPassword = async (token, newPassword) => {
+    // Hash the incoming token to match what's stored in DB
+    const hashedToken = crypto
+        .createHash('sha256')
+        .update(token)
+        .digest('hex');
+
+    const user = await User.findOne({
+        passwordResetToken: hashedToken,
+        passwordResetExpires: { $gt: Date.now() }
+    });
+
+    if (!user) {
+        throw new AppError('Token is invalid or has expired', 400);
+    }
+
+    // Set new password (pre-save hook will hash it)
+    user.password = newPassword;
+    user.passwordResetToken = undefined;
+    user.passwordResetExpires = undefined;
+
+    await user.save();
+
+    return user;
+};

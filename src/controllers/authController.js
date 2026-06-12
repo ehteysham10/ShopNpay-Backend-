@@ -129,3 +129,45 @@ export const login = asyncHandler(async (req, res) => {
         data: result
     });
 });
+
+// FORGOT PASSWORD
+export const forgotPassword = asyncHandler(async (req, res) => {
+    const { email } = req.body;
+
+    if (!email) {
+        throw new AppError('Email is required', 400);
+    }
+
+    await authService.forgotPassword(email);
+
+    // Always return success (prevents user enumeration)
+    res.status(200).json({
+        status: 'success',
+        message: 'If an account with that email exists, a password reset link has been sent.'
+    });
+});
+
+// RESET PASSWORD
+export const resetPassword = asyncHandler(async (req, res) => {
+    const { password, confirmPassword } = req.body;
+    const { token } = req.params;
+
+    if (!password || !confirmPassword) {
+        throw new AppError('Password and confirm password are required', 400);
+    }
+
+    if (password !== confirmPassword) {
+        throw new AppError('Passwords do not match', 400);
+    }
+
+    if (password.length < 8) {
+        throw new AppError('Password must be at least 8 characters', 400);
+    }
+
+    await authService.resetPassword(token, password);
+
+    res.status(200).json({
+        status: 'success',
+        message: 'Password has been reset successfully. You can now login with your new password.'
+    });
+});

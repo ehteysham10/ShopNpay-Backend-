@@ -93,7 +93,28 @@ const userSchema = new mongoose.Schema({
     },
 
     verificationToken: String,
-    verificationTokenExpires: Date
+    verificationTokenExpires: Date,
+
+    passwordResetToken: String,
+    passwordResetExpires: Date,
+
+    cart: [{
+        product: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Product'
+        },
+        quantity: {
+            type: Number,
+            default: 1,
+            min: 1,
+            max: 5
+        }
+    }],
+
+    wishlist: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Product'
+    }]
 
 }, { timestamps: true });
 
