@@ -17,7 +17,7 @@ The backend is configured to accept cross-origin requests from:
 
 ### Authentication Flow
 The system uses **JWT (JSON Web Token)** for authorization.
-1. **Login/Signup:** Call `/auth/login`, `/auth/register`, or `/auth/google`.
+1. **Login/Google OAuth:** Call `/auth/login` or `/auth/google`.
 2. **Token Storage:** Store the returned `token` securely on the frontend (e.g., `localStorage`, `sessionStorage`, or state).
 3. **Protected Requests:** Attach the token to the `Authorization` header of all protected requests:
    ```http
@@ -63,29 +63,34 @@ All API errors return a standard JSON structure with appropriate HTTP status cod
 * **Request Body:**
   ```json
   {
-    "name": "John Doe",
-    "email": "johndoe@example.com",
-    "password": "Password123"
+    "name": "Ehtisham",
+    "email": "iamehtisham10@asgmail.com",
+    "password": "SecurePassword123!"
   }
   ```
 * **Validation Rules:**
-  * `name`: Required, trim, minimum 2 characters.
+  * `name`: Required.
   * `email`: Required, must be a valid email format, must be unique in DB.
-  * `password`: Required, minimum 6 characters.
+  * `password`: Required.
 * **Success Response (`201 Created`):**
   ```json
   {
     "status": "success",
-    "message": "Registration successful. Please check your email to verify your account.",
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "message": "Registration successful.",
     "data": {
-      "user": {
-        "id": "60d0fe4f5311236168a109ca",
-        "name": "John Doe",
-        "email": "johndoe@example.com",
-        "role": "user",
-        "isVerified": false
-      }
+      "name": "Ehtisham",
+      "email": "iamehtisham10@asgmail.com",
+      "authProvider": "local",
+      "role": "user",
+      "isVerified": false,
+      "verificationToken": "ff3f019d02f33ad39a17156169e4277012f71054c9367d90e123523982026189",
+      "verificationTokenExpires": "2026-06-19T07:53:56.656Z",
+      "wishlist": [],
+      "_id": "6a2bbb14eb0841b9472122b6",
+      "cart": [],
+      "createdAt": "2026-06-12T07:53:56.713Z",
+      "updatedAt": "2026-06-12T07:53:56.713Z",
+      "__v": 0
     }
   }
   ```
@@ -101,7 +106,7 @@ All API errors return a standard JSON structure with appropriate HTTP status cod
   ```json
   {
     "status": "success",
-    "message": "Email verified successfully! You can now log in."
+    "message": "Email verified"
   }
   ```
 
@@ -123,14 +128,17 @@ All API errors return a standard JSON structure with appropriate HTTP status cod
   ```json
   {
     "status": "success",
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "message": "Login successful",
     "data": {
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
       "user": {
-        "id": "60d0fe4f5311236168a109ca",
+        "_id": "60d0fe4f5311236168a109ca",
         "name": "John Doe",
         "email": "johndoe@example.com",
         "role": "user",
-        "isVerified": true
+        "isVerified": true,
+        "cart": [],
+        "wishlist": []
       }
     }
   }
@@ -146,7 +154,7 @@ All API errors return a standard JSON structure with appropriate HTTP status cod
 * **Request Body:**
   ```json
   {
-    "token": "GOOGLE_ID_TOKEN_FROM_FRONTEND"
+    "credential": "GOOGLE_CREDENTIAL_JWT_FROM_FRONTEND"
   }
   ```
 * **Description:** Verifies the Google credentials, automatically creates a new account if one doesn't exist, and returns a JWT token.
@@ -154,14 +162,16 @@ All API errors return a standard JSON structure with appropriate HTTP status cod
   ```json
   {
     "status": "success",
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "message": "Google login successful",
     "data": {
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
       "user": {
-        "id": "60d0fe4f5311236168a109cb",
+        "_id": "60d0fe4f5311236168a109cb",
         "name": "Google User",
         "email": "googleuser@gmail.com",
         "role": "user",
-        "isVerified": true
+        "isVerified": true,
+        "authProvider": "google"
       }
     }
   }
@@ -225,13 +235,12 @@ All API errors return a standard JSON structure with appropriate HTTP status cod
   {
     "status": "success",
     "data": {
-      "user": {
-        "id": "60d0fe4f5311236168a109ca",
-        "name": "John Doe",
-        "email": "johndoe@example.com",
-        "role": "user",
-        "isVerified": true
-      }
+      "id": "60d0fe4f5311236168a109ca",
+      "name": "John Doe",
+      "email": "johndoe@example.com",
+      "role": "user",
+      "isVerified": true,
+      "createdAt": "2026-06-12T07:53:56.713Z"
     }
   }
   ```
@@ -253,31 +262,34 @@ All API errors return a standard JSON structure with appropriate HTTP status cod
   ```json
   {
     "status": "success",
-    "total": 25,
-    "page": 1,
-    "limit": 12,
-    "totalPages": 3,
-    "products": [
-      {
-        "_id": "60d0fe4f5311236168a109cf",
-        "productId": "SP-8Hx3kQ",
-        "title": "Adidas Ultraboost 22",
-        "description": "High-performance running shoe with maximum energy return.",
-        "price": 150,
-        "category": "shoes",
-        "images": [
-          {
-            "url": "https://res.cloudinary.com/duekquzbp/image/upload/v12345/shoe.jpg",
-            "publicId": "shopnpay/products/shoe"
-          }
-        ],
-        "createdBy": {
-          "_id": "60d0fe4f5311236168a109ca",
-          "name": "Admin User"
-        },
-        "createdAt": "2026-06-11T12:00:00.000Z"
-      }
-    ]
+    "results": 1,
+    "data": {
+      "products": [
+        {
+          "_id": "60d0fe4f5311236168a109cf",
+          "productId": "SP-8Hx3kQ",
+          "title": "Adidas Ultraboost 22",
+          "description": "High-performance running shoe with maximum energy return.",
+          "price": 150,
+          "category": "shoes",
+          "images": [
+            {
+              "url": "https://res.cloudinary.com/duekquzbp/image/upload/v12345/shoe.jpg",
+              "publicId": "shopnpay/products/shoe"
+            }
+          ],
+          "createdBy": {
+            "_id": "60d0fe4f5311236168a109ca",
+            "name": "Admin User"
+          },
+          "createdAt": "2026-06-11T12:00:00.000Z"
+        }
+      ],
+      "total": 1,
+      "page": 1,
+      "limit": 12,
+      "totalPages": 1
+    }
   }
   ```
 
@@ -346,7 +358,7 @@ Review endpoints are nested resource routes under products.
       "_id": "60d0fe4f5311236168a109d9",
       "product": "60d0fe4f5311236168a109cf",
       "user": "60d0fe4f5311236168a109ca",
-      "name": "John Doe",
+      "name": "Ehtisham",
       "rating": 5,
       "comment": "Absolutely incredible! The build quality exceeded my expectations.",
       "createdAt": "2026-06-12T07:25:00.000Z"
@@ -371,7 +383,7 @@ Review endpoints are nested resource routes under products.
         "_id": "60d0fe4f5311236168a109d9",
         "product": "60d0fe4f5311236168a109cf",
         "user": "60d0fe4f5311236168a109ca",
-        "name": "John Doe",
+        "name": "Ehtisham",
         "rating": 5,
         "comment": "Absolutely incredible! The build quality exceeded my expectations.",
         "createdAt": "2026-06-12T07:25:00.000Z"
@@ -394,6 +406,7 @@ All Cart API endpoints are protected and only accessible to users with the role 
   ```json
   {
     "status": "success",
+    "results": 1,
     "data": [
       {
         "product": {
@@ -424,7 +437,25 @@ All Cart API endpoints are protected and only accessible to users with the role 
 * **Params:** `productId` (String, e.g., `SP-8Hx3kQ`)
 * **Validation:** If the item is already present in the cart, the server throws a `400 Bad Request` error ("Product is already in your cart"). Use the `PATCH` endpoint to adjust quantities.
 * **Success Response (`200 OK`):**
-  * Returns the full updated and populated cart array.
+  ```json
+  {
+    "status": "success",
+    "message": "Product added to cart",
+    "data": [
+      {
+        "product": {
+          "_id": "60d0fe4f5311236168a109cf",
+          "productId": "SP-8Hx3kQ",
+          "title": "Adidas Ultraboost 22",
+          "price": 150,
+          "images": [...]
+        },
+        "quantity": 1,
+        "_id": "60d0fe4f5311236168a109ca"
+      }
+    ]
+  }
+  ```
 
 ---
 
@@ -442,7 +473,25 @@ All Cart API endpoints are protected and only accessible to users with the role 
 * **Validation Rules:**
   * `quantity`: Required, integer, minimum `1`, maximum **`5`**.
 * **Success Response (`200 OK`):**
-  * Returns the full updated and populated cart array.
+  ```json
+  {
+    "status": "success",
+    "message": "Cart updated",
+    "data": [
+      {
+        "product": {
+          "_id": "60d0fe4f5311236168a109cf",
+          "productId": "SP-8Hx3kQ",
+          "title": "Adidas Ultraboost 22",
+          "price": 150,
+          "images": [...]
+        },
+        "quantity": 3,
+        "_id": "60d0fe4f5311236168a109ca"
+      }
+    ]
+  }
+  ```
 
 ---
 
@@ -452,7 +501,13 @@ All Cart API endpoints are protected and only accessible to users with the role 
 * **Auth Required:** Yes (`role: 'user'`)
 * **Params:** `productId` (String, e.g. `SP-8Hx3kQ`)
 * **Success Response (`200 OK`):**
-  * Returns the full updated and populated cart array.
+  ```json
+  {
+    "status": "success",
+    "message": "Product removed from cart",
+    "data": []
+  }
+  ```
 
 ---
 
@@ -468,6 +523,7 @@ All Wishlist API endpoints are protected and only accessible to users with the r
   ```json
   {
     "status": "success",
+    "results": 1,
     "data": [
       {
         "_id": "60d0fe4f5311236168a109cf",
@@ -493,7 +549,21 @@ All Wishlist API endpoints are protected and only accessible to users with the r
 * **Auth Required:** Yes (`role: 'user'`)
 * **Params:** `productId` (String, e.g. `SP-8Hx3kQ`)
 * **Success Response (`200 OK`):**
-  * Returns the full updated and populated wishlist array.
+  ```json
+  {
+    "status": "success",
+    "message": "Product added to wishlist",
+    "data": [
+      {
+        "_id": "60d0fe4f5311236168a109cf",
+        "productId": "SP-8Hx3kQ",
+        "title": "Adidas Ultraboost 22",
+        "price": 150,
+        "images": [...]
+      }
+    ]
+  }
+  ```
 
 ---
 
@@ -503,7 +573,13 @@ All Wishlist API endpoints are protected and only accessible to users with the r
 * **Auth Required:** Yes (`role: 'user'`)
 * **Params:** `productId` (String, e.g. `SP-8Hx3kQ`)
 * **Success Response (`200 OK`):**
-  * Returns the full updated and populated wishlist array.
+  ```json
+  {
+    "status": "success",
+    "message": "Product removed from wishlist",
+    "data": []
+  }
+  ```
 
 ---
 
@@ -677,6 +753,7 @@ All admin APIs require a valid admin bearer token (`role: 'admin'`).
   ```json
   {
     "status": "success",
+    "message": "Product created successfully",
     "data": {
       "_id": "60d0fe4f5311236168a109cf",
       "productId": "SP-8Hx3kQ",
@@ -706,7 +783,19 @@ All admin APIs require a valid admin bearer token (`role: 'admin'`).
 * **Request Body (FormData / JSON):**
   * Send fields to update (`title`, `price`, etc.). If uploading new files to `images`, the backend automatically replaces all previous images in Cloudinary.
 * **Success Response (`200 OK`):**
-  * Returns updated product details.
+  ```json
+  {
+    "status": "success",
+    "message": "Product updated successfully",
+    "data": {
+      "_id": "60d0fe4f5311236168a109cf",
+      "productId": "SP-8Hx3kQ",
+      "title": "Adidas Ultraboost 22 Updated",
+      "price": 160,
+      ...
+    }
+  }
+  ```
 
 ---
 
@@ -719,7 +808,7 @@ All admin APIs require a valid admin bearer token (`role: 'admin'`).
   ```json
   {
     "status": "success",
-    "message": "Product and associated images deleted successfully"
+    "message": "Product deleted successfully"
   }
   ```
 
@@ -734,14 +823,16 @@ All admin APIs require a valid admin bearer token (`role: 'admin'`).
   {
     "status": "success",
     "results": 2,
-    "data": [
-      {
-        "id": "60d0fe4f5311236168a109ca",
-        "name": "John Doe",
-        "email": "johndoe@example.com",
-        "role": "user"
-      }
-    ]
+    "data": {
+      "users": [
+        {
+          "_id": "60d0fe4f5311236168a109ca",
+          "name": "John Doe",
+          "email": "johndoe@example.com",
+          "role": "user"
+        }
+      ]
+    }
   }
   ```
 
@@ -762,10 +853,12 @@ All admin APIs require a valid admin bearer token (`role: 'admin'`).
   ```json
   {
     "status": "success",
-    "message": "User role updated successfully",
+    "message": "User role updated to admin successfully",
     "data": {
       "user": {
         "id": "60d0fe4f5311236168a109ca",
+        "name": "John Doe",
+        "email": "johndoe@example.com",
         "role": "admin"
       }
     }
@@ -783,7 +876,8 @@ All admin APIs require a valid admin bearer token (`role: 'admin'`).
   ```json
   {
     "status": "success",
-    "message": "User deleted successfully"
+    "message": "User deleted successfully",
+    "data": null
   }
   ```
 
