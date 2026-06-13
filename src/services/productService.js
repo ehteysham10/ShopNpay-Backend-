@@ -42,23 +42,32 @@ export const createProduct = async (productData, files, adminId) => {
 export const getAllProducts = async (queryParams) => {
     const page = parseInt(queryParams.page, 10) || 1;
     const limit = parseInt(queryParams.limit, 10) || 12;
-    const { category, search } = queryParams;
+    const { category, search, sort } = queryParams; // 'sort' parameter ko destructure kiya
 
     const filter = {};
 
+    // 1. Category Filter Logic
     if (category && category !== 'all') {
         filter.category = category.toLowerCase();
     }
 
+    // 2. Search Text Title Filter Logic
     if (search) {
         filter.title = { $regex: search, $options: 'i' };
     }
 
+    // 3. Dynamic Sorting Handler (Admin ke dropdown ke liye)
+    let sortCriteria = { createdAt: -1 }; // Default: Newest first (Latest to Oldest)
+    if (sort === 'oldest') {
+        sortCriteria = { createdAt: 1 };  // Oldest first (Oldest to Latest)
+    }
+
     const skip = (page - 1) * limit;
 
+    // 4. Concurrently fetch data patterns 
     const [products, total] = await Promise.all([
         Product.find(filter)
-            .sort({ createdAt: -1 })
+            .sort(sortCriteria) // Hardcoded ki jagah dynamic criteria pass kiya
             .skip(skip)
             .limit(limit)
             .populate('createdBy', 'name'),
@@ -73,7 +82,6 @@ export const getAllProducts = async (queryParams) => {
         totalPages: Math.ceil(total / limit)
     };
 };
-
 // ================= GET SINGLE PRODUCT =================
 export const getProduct = async (productId) => {
     const product = await Product.findOne({ productId }).populate('createdBy', 'name');

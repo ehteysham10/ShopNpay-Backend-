@@ -128,17 +128,26 @@ export const getMyOrders = async (userId) => {
     return orders;
 };
 
+
 // ================= GET ALL ORDERS (Admin) =================
 export const getAllOrders = async (queryParams) => {
+    // 1. Base 10 ke sath parse karein aur default limit 12 rakhein
     const page = parseInt(queryParams.page, 10) || 1;
-    const limit = parseInt(queryParams.limit, 10) || 10;
+    const limit = parseInt(queryParams.limit, 10) || 12;
     const skip = (page - 1) * limit;
 
+    // 2. Frontend dropdown ke mutabik dynamic sorting set karein
+    let sortCriteria = { createdAt: -1 }; // Default: Latest to Oldest
+    if (queryParams.sort === 'oldest') {
+        sortCriteria = { createdAt: 1 };  // Oldest to Latest
+    }
+
+    // 3. Parallel Execution (Best Practice)
     const [orders, total] = await Promise.all([
         Order.find()
             .populate('user', 'name email')
             .populate('items.product', 'productId title images')
-            .sort({ createdAt: -1 })
+            .sort(sortCriteria) // Dynamic sort pass kiya
             .skip(skip)
             .limit(limit),
         Order.countDocuments()

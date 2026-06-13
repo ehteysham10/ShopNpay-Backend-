@@ -8,7 +8,7 @@ Welcome to the **ShopNPay API Documentation**! This guide is designed specifical
 
 ### Base URL
 * **Development:** `http://localhost:5000/api/v1`
-* **Production:** *Update this to your hosted backend URL (e.g., `https://your-backend.herokuapp.com/api/v1`)*
+* **Production:** `https://shopnpay-backend.onrender.com/api/v1`
 
 ### CORS Policy
 The backend is configured to accept cross-origin requests from:

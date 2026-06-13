@@ -53,11 +53,43 @@ export const updateUserRole = asyncHandler(async (req, res) => {
     });
 });
 
+// ================= GET ALL USERS (Admin) =================
 export const getAllUsers = asyncHandler(async (req, res) => {
-    const users = await User.find();
+    // 1. Query parameters se page, limit, search aur sort nikalen
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 12; // Frontend ke mutabik 12 items
+    const skip = (page - 1) * limit;
+
+    const filter = {};
+
+    // 2. Email search bar logic (Frontend search input ke liye)
+    if (req.query.search) {
+        filter.email = { $regex: req.query.search, $options: 'i' }; // Case-insensitive search
+    }
+
+    // 3. Dynamic Sorting logic (Frontend dropdown ke liye)
+    let sortCriteria = { createdAt: -1 }; // Default: Latest to Oldest
+    if (req.query.sort === 'oldest') {
+        sortCriteria = { createdAt: 1 };  // Oldest to Latest
+    }
+
+    // 4. Parallel execution se data aur total count fetch karen
+    const [users, totalUsers] = await Promise.all([
+        User.find(filter)
+            .sort(sortCriteria)
+            .skip(skip)
+            .limit(limit)
+            .select('-password'), // Security ke liye password field exclude kar di
+        User.countDocuments(filter)
+    ]);
+
 
     res.status(200).json({
         status: 'success',
+        page,
+        limit,
+        totalCount: totalUsers,
+        totalPages: Math.ceil(totalUsers / limit),
         results: users.length,
         data: {
             users
