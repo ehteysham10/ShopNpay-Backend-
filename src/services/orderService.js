@@ -1,3 +1,6 @@
+
+
+
 // import Stripe from 'stripe';
 // import Order from '../models/orderModel.js';
 // import User from '../models/userModel.js';
@@ -69,27 +72,40 @@
 // export const confirmOrder = async (userId, paymentIntentId, shippingInfo) => {
 //     const { fullAddress, city, phone } = shippingInfo;
 
-//     // Verify payment with Stripe
+//     // 1. Verify payment with Stripe
 //     const paymentIntent = await getStripe().paymentIntents.retrieve(paymentIntentId);
 
 //     if (paymentIntent.status !== 'succeeded') {
 //         throw new AppError('Payment has not been completed', 400);
 //     }
 
-//     // Check if order already exists for this payment
+//     // 🔥 CRITICAL FIX 1: Duplicate check ko sab se upar le aaye hain.
+//     // Agar click network buffering ya frontend state shift ki wajah se API do dafa execute ho jaye,
+//     // to AppError throw kar ke frontend ko crash karne ke bajaye hum chupke se wahi banaye hua order 
+//     // return kar denge taaki frontend ka `.ok` code execute ho aur redirection smoothly ho jaye!
 //     const existingOrder = await Order.findOne({ paymentIntentId });
 //     if (existingOrder) {
-//         throw new AppError('Order already placed for this payment', 400);
+//         return existingOrder;
 //     }
 
 //     // Get user's cart with products
 //     const user = await User.findById(userId).populate('cart.product');
 
+//     // 🔥 CRITICAL FIX 2: Agar cart already pehli request se clear ho chuki hai, 
+//     // to throw error karne se pehle confirm karlein ke kahin order register to nahi ho chuka.
 //     if (!user.cart || user.cart.length === 0) {
+//         const raceConditionCheck = await Order.findOne({ paymentIntentId });
+//         if (raceConditionCheck) {
+//             return raceConditionCheck;
+//         }
 //         throw new AppError('Your cart is empty', 400);
 //     }
 
 //     const validCart = user.cart.filter(item => item.product !== null);
+
+//     if (validCart.length === 0) {
+//         throw new AppError('Your cart contains no valid products', 400);
+//     }
 
 //     // Build items with price from DB
 //     const items = validCart.map(item => ({
@@ -185,18 +201,6 @@
 // export { PAKISTAN_CITIES } from '../models/orderModel.js';
 
 
-
-
-
-
-
-
-
-
-
-
-
-
 import Stripe from 'stripe';
 import Order from '../models/orderModel.js';
 import User from '../models/userModel.js';
@@ -275,10 +279,8 @@ export const confirmOrder = async (userId, paymentIntentId, shippingInfo) => {
         throw new AppError('Payment has not been completed', 400);
     }
 
-    // 🔥 CRITICAL FIX 1: Duplicate check ko sab se upar le aaye hain.
-    // Agar click network buffering ya frontend state shift ki wajah se API do dafa execute ho jaye,
-    // to AppError throw kar ke frontend ko crash karne ke bajaye hum chupke se wahi banaye hua order 
-    // return kar denge taaki frontend ka `.ok` code execute ho aur redirection smoothly ho jaye!
+    // 🔥 CRITICAL FIX 1: Duplicate check sab se upar. 
+    // Agar exact same request do dafa aaye, to purana order return ho jaye bina error throw kiye.
     const existingOrder = await Order.findOne({ paymentIntentId });
     if (existingOrder) {
         return existingOrder;
@@ -287,20 +289,18 @@ export const confirmOrder = async (userId, paymentIntentId, shippingInfo) => {
     // Get user's cart with products
     const user = await User.findById(userId).populate('cart.product');
 
-    // 🔥 CRITICAL FIX 2: Agar cart already pehli request se clear ho chuki hai, 
-    // to throw error karne se pehle confirm karlein ke kahin order register to nahi ho chuka.
-    if (!user.cart || user.cart.length === 0) {
+    // Filter out any deleted products safely
+    const validCart = user.cart ? user.cart.filter(item => item.product !== null) : [];
+
+    // 🔥 CRITICAL FIX 2: Race condition handler logic corrected.
+    // Agar cart khali hai YA valid products nahi hain, to error throw karne se pehle 
+    // double check karein ke kahin pehli request ne order successfully create to nahi kar diya tha.
+    if (validCart.length === 0) {
         const raceConditionCheck = await Order.findOne({ paymentIntentId });
         if (raceConditionCheck) {
             return raceConditionCheck;
         }
-        throw new AppError('Your cart is empty', 400);
-    }
-
-    const validCart = user.cart.filter(item => item.product !== null);
-
-    if (validCart.length === 0) {
-        throw new AppError('Your cart contains no valid products', 400);
+        throw new AppError('Your cart is empty or contains invalid products', 400);
     }
 
     // Build items with price from DB
@@ -381,7 +381,9 @@ export const updateOrderStatus = async (orderId, status) => {
         throw new AppError(`Invalid status. Must be one of: ${validStatuses.join(', ')}`, 400);
     }
 
-    const order = await Order.findOne({ orderId });
+    // 🔥 FIXED BUG: Order.findOne({ orderId }) ko Order.findById(orderId) kiya hai 
+    // taaki Mongoose default unique hex ID (_id) se document perfectly find kar sake.
+    const order = await Order.findById(orderId);
 
     if (!order) {
         throw new AppError('Order not found', 404);
