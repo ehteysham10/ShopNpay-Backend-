@@ -14,7 +14,6 @@ export const createProduct = async (productData, files, adminId) => {
         throw new AppError('Maximum 5 images allowed', 400);
     }
 
-    // Upload all images to Cloudinary
     const imageUploadPromises = files.map(file =>
         uploadToCloudinary(file.buffer, 'shopnpay/products')
     );
@@ -38,36 +37,34 @@ export const createProduct = async (productData, files, adminId) => {
     return product;
 };
 
-// ================= GET ALL PRODUCTS =================
+// ================= GET ALL PRODUCTS (🚀 CLEAN & OPTIMIZED) =================
 export const getAllProducts = async (queryParams) => {
     const page = parseInt(queryParams.page, 10) || 1;
     const limit = parseInt(queryParams.limit, 10) || 12;
-    const { category, search, sort } = queryParams; // 'sort' parameter ko destructure kiya
+    const { category, search, sort } = queryParams;
 
     const filter = {};
 
-    // 1. Category Filter Logic
     if (category && category !== 'all') {
         filter.category = category.toLowerCase();
     }
 
-    // 2. Search Text Title Filter Logic
     if (search) {
         filter.title = { $regex: search, $options: 'i' };
     }
 
-    // 3. Dynamic Sorting Handler (Admin ke dropdown ke liye)
-    let sortCriteria = { createdAt: -1 }; // Default: Newest first (Latest to Oldest)
+    let sortCriteria = { createdAt: -1 };
     if (sort === 'oldest') {
-        sortCriteria = { createdAt: 1 };  // Oldest first (Oldest to Latest)
+        sortCriteria = { createdAt: 1 };
     }
 
     const skip = (page - 1) * limit;
 
-    // 4. Concurrently fetch data patterns 
+    // Concurrently fetching and dropping heavy fields for landing speed
     const [products, total] = await Promise.all([
         Product.find(filter)
-            .sort(sortCriteria) // Hardcoded ki jagah dynamic criteria pass kiya
+            .select('-description') // Exclude description only on listings/grids
+            .sort(sortCriteria)
             .skip(skip)
             .limit(limit)
             .populate('createdBy', 'name'),
@@ -82,8 +79,10 @@ export const getAllProducts = async (queryParams) => {
         totalPages: Math.ceil(total / limit)
     };
 };
+
 // ================= GET SINGLE PRODUCT =================
 export const getProduct = async (productId) => {
+    // Keeping all fields intact so single product screen displays everything smoothly
     const product = await Product.findOne({ productId }).populate('createdBy', 'name');
 
     if (!product) {
@@ -101,25 +100,21 @@ export const updateProduct = async (productId, updateData, files) => {
         throw new AppError('Product not found', 404);
     }
 
-    // Update text fields
     if (updateData.title) product.title = updateData.title;
     if (updateData.description) product.description = updateData.description;
     if (updateData.price) product.price = updateData.price;
     if (updateData.category) product.category = updateData.category;
 
-    // If new images are uploaded, replace old ones
     if (files && files.length > 0) {
         if (files.length > 5) {
             throw new AppError('Maximum 5 images allowed', 400);
         }
 
-        // Delete old images from Cloudinary
         const deletePromises = product.images.map(img =>
             deleteFromCloudinary(img.publicId)
         );
         await Promise.all(deletePromises);
 
-        // Upload new images
         const uploadPromises = files.map(file =>
             uploadToCloudinary(file.buffer, 'shopnpay/products')
         );
@@ -132,7 +127,6 @@ export const updateProduct = async (productId, updateData, files) => {
     }
 
     await product.save();
-
     return product;
 };
 
@@ -144,13 +138,11 @@ export const deleteProduct = async (productId) => {
         throw new AppError('Product not found', 404);
     }
 
-    // Delete images from Cloudinary
     const deletePromises = product.images.map(img =>
         deleteFromCloudinary(img.publicId)
     );
     await Promise.all(deletePromises);
 
     await Product.deleteOne({ productId });
-
     return product;
 };
