@@ -1,4 +1,6 @@
+import mongoose from 'mongoose';
 import Product from '../models/productModel.js';
+import Review from '../models/reviewModel.js';
 import { AppError } from '../middlewares/errorMiddleware.js';
 import { uploadToCloudinary, deleteFromCloudinary } from '../utils/cloudinary.js';
 
@@ -37,46 +39,146 @@ export const createProduct = async (productData, files, adminId) => {
     return product;
 };
 
-// ================= GET ALL PRODUCTS (🚀 CLEAN & OPTIMIZED) =================
+// ================= SORT MAP =================
+const SORT_MAP = {
+    'Featured':            { createdAt: -1 },
+    'Price: Low to High':  { price: 1 },
+    'Price: High to Low':  { price: -1 },
+    'Top Rated':           { rating: -1 },   // virtual field added in aggregation
+    'NameAZ':              { title: 1 },
+    'NameZA':              { title: -1 },
+};
+
+// ================= GET ALL PRODUCTS (cursor-based pagination) =================
 export const getAllProducts = async (queryParams) => {
-    const page = parseInt(queryParams.page, 10) || 1;
-    const limit = parseInt(queryParams.limit, 10) || 12;
-    const { category, search, sort } = queryParams;
+    const limit   = Math.min(parseInt(queryParams.limit, 10) || 12, 100);
+    const cursor  = queryParams.cursor   || null;   // _id of last seen product
+    const sortBy  = queryParams.sortBy   || 'Featured';
+    const { category, search, maxPrice } = queryParams;
 
-    const filter = {};
+    // ── 1. Build base filter (excludes price cap — used for maxPrice calculation) ──
+    const baseFilter = {};
 
-    if (category && category !== 'all') {
-        filter.category = category.toLowerCase();
+    if (category && category.toLowerCase() !== 'all') {
+        baseFilter.category = category.toLowerCase();
     }
 
     if (search) {
-        filter.title = { $regex: search, $options: 'i' };
+        baseFilter.title = { $regex: search, $options: 'i' };
     }
 
-    let sortCriteria = { createdAt: -1 };
-    if (sort === 'oldest') {
-        sortCriteria = { createdAt: 1 };
-    }
-
-    const skip = (page - 1) * limit;
-
-    // Concurrently fetching and dropping heavy fields for landing speed
-    const [products, total] = await Promise.all([
-        Product.find(filter)
-            .select('-description') // Exclude description only on listings/grids
-            .sort(sortCriteria)
-            .skip(skip)
-            .limit(limit)
-            .populate('createdBy', 'name'),
-        Product.countDocuments(filter)
+    // ── 2. Compute overall maxPrice from the base-filtered (un-capped) set ──
+    const [priceAgg] = await Product.aggregate([
+        { $match: baseFilter },
+        { $group: { _id: null, maxPrice: { $max: '$price' } } }
     ]);
+    const computedMaxPrice = priceAgg ? Math.ceil(priceAgg.maxPrice) : 0;
+
+    // ── 3. Build the paginated filter (includes price cap + cursor) ──
+    const filter = { ...baseFilter };
+
+    if (maxPrice) {
+        filter.price = { $lte: parseFloat(maxPrice) };
+    }
+
+    // For cursor: we need the document that corresponds to the cursor _id so we
+    // can apply a range condition that works regardless of sort field.
+    if (cursor) {
+        filter._id = { $gt: new mongoose.Types.ObjectId(cursor) };
+    }
+
+    // ── 4. Determine sort criteria ──
+    // "Top Rated" needs a virtual `rating` field from an aggregation —
+    // handled separately below. All others use a direct .find() + .sort().
+    const primarySort = SORT_MAP[sortBy] || { createdAt: -1 };
+
+    let products;
+
+    if (sortBy === 'Top Rated') {
+        // Use an aggregation pipeline to compute avgRating per product,
+        // sort by it, and apply cursor/limit.
+        const pipeline = [
+            { $match: filter },
+            {
+                $lookup: {
+                    from: 'reviews',
+                    localField: '_id',
+                    foreignField: 'product',
+                    as: 'reviews'
+                }
+            },
+            {
+                $addFields: {
+                    rating: {
+                        $cond: {
+                            if: { $gt: [{ $size: '$reviews' }, 0] },
+                            then: { $avg: '$reviews.rating' },
+                            else: 0
+                        }
+                    }
+                }
+            },
+            { $sort: { rating: -1, _id: 1 } },
+            { $limit: limit + 1 },          // fetch one extra to detect hasMore
+            {
+                $project: {
+                    productId: 1,
+                    title: 1,
+                    price: 1,
+                    category: 1,
+                    description: 1,
+                    images: { url: 1 },
+                    rating: 1,
+                    createdAt: 1
+                }
+            }
+        ];
+
+        products = await Product.aggregate(pipeline);
+    } else {
+        // Standard path: find + sort + limit
+        const rawProducts = await Product.find(filter)
+            .select('productId title price category description images createdAt')
+            .sort({ ...primarySort, _id: 1 })   // _id as stable tiebreaker
+            .limit(limit + 1);                  // fetch one extra to detect hasMore
+
+        // Attach avgRating from Review collection
+        const productIds = rawProducts.map(p => p._id);
+
+        const ratingAgg = await Review.aggregate([
+            { $match: { product: { $in: productIds } } },
+            { $group: { _id: '$product', avgRating: { $avg: '$rating' } } }
+        ]);
+
+        const ratingMap = {};
+        for (const r of ratingAgg) {
+            ratingMap[r._id.toString()] = parseFloat(r.avgRating.toFixed(1));
+        }
+
+        products = rawProducts.map(p => ({
+            _id:         p._id,
+            productId:   p.productId,
+            title:       p.title,
+            price:       p.price,
+            category:    p.category,
+            description: p.description,
+            images:      p.images.map(img => ({ url: img.url })),
+            rating:      ratingMap[p._id.toString()] ?? 0,
+            createdAt:   p.createdAt
+        }));
+    }
+
+    // ── 5. Determine hasMore & nextCursor ──
+    const hasMore = products.length > limit;
+    if (hasMore) products.pop();   // remove the extra probe document
+
+    const nextCursor = hasMore ? products[products.length - 1]._id.toString() : null;
 
     return {
         products,
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit)
+        nextCursor,
+        hasMore,
+        maxPrice: computedMaxPrice
     };
 };
 
