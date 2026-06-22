@@ -49,10 +49,11 @@ const SORT_MAP = {
     'NameZA':              { title: -1 },
 };
 
-// ================= GET ALL PRODUCTS (cursor-based pagination) =================
+// ================= GET ALL PRODUCTS (pagination) =================
 export const getAllProducts = async (queryParams) => {
     const limit   = Math.min(parseInt(queryParams.limit, 10) || 12, 100);
     const cursor  = queryParams.cursor   || null;   // _id of last seen product
+    const page    = parseInt(queryParams.page, 10) || null;
     const sortBy  = queryParams.sortBy   || 'Featured';
     const { category, search, maxPrice } = queryParams;
 
@@ -74,23 +75,34 @@ export const getAllProducts = async (queryParams) => {
     ]);
     const computedMaxPrice = priceAgg ? Math.ceil(priceAgg.maxPrice) : 0;
 
-    // ── 3. Build the paginated filter (includes price cap + cursor) ──
+    // ── 3. Determine sort criteria ──
+    // "Top Rated" needs a virtual `rating` field from an aggregation —
+    // handled separately below. All others use a direct .find() + .sort().
+    const primarySort = SORT_MAP[sortBy] || { createdAt: -1 };
+    const sortField = Object.keys(primarySort)[0];
+    const sortDirection = primarySort[sortField];
+
+    // ── 4. Build the paginated filter (includes price cap + cursor) ──
     const filter = { ...baseFilter };
 
     if (maxPrice) {
         filter.price = { $lte: parseFloat(maxPrice) };
     }
 
-    // For cursor: we need the document that corresponds to the cursor _id so we
-    // can apply a range condition that works regardless of sort field.
+    // For cursor: apply range condition based on sort direction
     if (cursor) {
-        filter._id = { $gt: new mongoose.Types.ObjectId(cursor) };
+        if (sortDirection === -1) {
+            filter._id = { $lt: new mongoose.Types.ObjectId(cursor) };
+        } else {
+            filter._id = { $gt: new mongoose.Types.ObjectId(cursor) };
+        }
     }
 
-    // ── 4. Determine sort criteria ──
-    // "Top Rated" needs a virtual `rating` field from an aggregation —
-    // handled separately below. All others use a direct .find() + .sort().
-    const primarySort = SORT_MAP[sortBy] || { createdAt: -1 };
+    // For page/offset pagination
+    let skipAmount = 0;
+    if (page && page > 0) {
+        skipAmount = (page - 1) * limit;
+    }
 
     let products;
 
@@ -118,7 +130,14 @@ export const getAllProducts = async (queryParams) => {
                     }
                 }
             },
-            { $sort: { rating: -1, _id: 1 } },
+            { $sort: { rating: -1, _id: 1 } }
+        ];
+
+        if (skipAmount > 0) {
+            pipeline.push({ $skip: skipAmount });
+        }
+
+        pipeline.push(
             { $limit: limit + 1 },          // fetch one extra to detect hasMore
             {
                 $project: {
@@ -137,10 +156,15 @@ export const getAllProducts = async (queryParams) => {
         products = await Product.aggregate(pipeline);
     } else {
         // Standard path: find + sort + limit
-        const rawProducts = await Product.find(filter)
+        const query = Product.find(filter)
             .select('productId title price category description images createdAt')
-            .sort({ ...primarySort, _id: 1 })   // _id as stable tiebreaker
-            .limit(limit + 1);                  // fetch one extra to detect hasMore
+            .sort({ ...primarySort, _id: 1 });  // _id as stable tiebreaker
+
+        if (skipAmount > 0) {
+            query.skip(skipAmount);
+        }
+
+        const rawProducts = await query.limit(limit + 1); // fetch one extra to detect hasMore
 
         // Attach avgRating from Review collection
         const productIds = rawProducts.map(p => p._id);
