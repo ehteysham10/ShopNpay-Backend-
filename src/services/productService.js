@@ -151,7 +151,7 @@ export const getAllProducts = async (queryParams) => {
                     createdAt: 1
                 }
             }
-        ];
+        );
 
         products = await Product.aggregate(pipeline);
     } else {
